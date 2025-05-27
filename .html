@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>碎碎念記帳本（升級版）</title>
+  <style>
+    body {
+      font-family: 'Comic Neue', 'Comic Sans MS', cursive, 'Segoe UI Emoji', sans-serif;
+      max-width: 650px;
+      margin: 20px auto;
+      background: #ffe6f0;
+      color: #5a2a4c;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(255,182,193,0.5);
+    }
+    input, button {
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 18px;
+      border: 2px solid #d98fbf;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.3s ease;
+    }
+    input:focus, button:hover {
+      border-color: #f06292;
+    }
+    button {
+      background-color: #f48fb1;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:active {
+      background-color: #d81b60;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      border: 1px solid #d98fbf;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #f8bbd0;
+    }
+    .income {
+      color: #388e3c;
+      font-weight: 600;
+    }
+    .expense {
+      color: #c2185b;
+      font-weight: 600;
+    }
+    #nag-msg {
+      margin-top: 15px;
+      font-style: italic;
+      color: #ad1457;
+      min-height: 26px;
+      font-size: 16px;
+    }
+    h2, h3 {
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-shadow: 1px 1px 1px #f8bbd0;
+    }
+    .action-btn {
+      background-color: #f06292;
+      border: none;
+      padding: 6px 12px;
+      margin-left: 5px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    .action-btn:hover {
+      background-color: #c2185b;
+    }
+    .edit-mode input {
+      width: 90%;
+      font-size: 16px;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<h2>📢 碎碎念記帳本（升級版）</h2>
+
+<label>日期：<input type="date" id="date" /></label><br/>
+<label>類別：<input type="text" id="category" placeholder="餐飲、交通、薪水..." /></label><br/>
+<label>金額：<input type="number" id="amount" placeholder="收入正數，支出負數" /></label><br/>
+<label>備註：<input type="text" id="note" placeholder="備註（可不填）" /></label><br/>
+<button onclick="addRecord()">新增紀錄</button>
+
+<div id="nag-msg"></div>
+
+<h3>記帳紀錄</h3>
+<table>
+  <thead>
+    <tr><th>日期</th><th>類別</th><th>金額</th><th>備註</th><th>操作</th></tr>
+  </thead>
+  <tbody id="record-list"></tbody>
+</table>
+
+<h3>收支總計：<span id="total">0</span></h3>
+
+<script>
+  const recordList = document.getElementById('record-list');
+  const totalSpan = document.getElementById('total');
+  const nagMsg = document.getElementById('nag-msg');
+
+  let records = JSON.parse(localStorage.getItem('records') || '[]');
+
+  function randomNag() {
+    const nags = [
+      "欸欸，別偷懶，趕快輸入資料啦！",
+      "你確定不寫備註嗎？要不要說點什麼？",
+      "哎呀，金額欄別空白哦，我可不是占卜師。",
+      "沒填類別，記帳會亂套耶。",
+      "輸入完了沒？我在這等你喔～",
+      "小心錢包哭哭，趕快把錢記下來吧！"
+    ];
+    return nags[Math.floor(Math.random() * nags.length)];
+  }
+
+  function specialNag(category, amount) {
+    category = category.toLowerCase();
+    if ((category.includes("吃") || category.includes("餐")) && amount > 500) {
+      return "你是螞蟻嗎？吃這麼甜！🍰";
+    }
+    if ((category.includes("交通") || category.includes("捷運") || category.includes("車")) && amount > 300) {
+      return "坐直升機上班嗎？交通費太猛了！🚁";
+    }
+    if ((category.includes("娛樂") || category.includes("遊戲")) && amount > 800) {
+      return "娛樂當飯吃，小心口袋空空！🤣";
+    }
+    return "";
+  }
+
+  function render() {
+    recordList.innerHTML = '';
+    let total = 0;
+    records.forEach((r, idx) => {
+      total += Number(r.amount);
+
+      if (r.editing) {
+        const tr = document.createElement('tr');
+        tr.classList.add('edit-mode');
+        tr.innerHTML = `
+          <td><input type="date" value="${r.date}" id="edit-date-${idx}" /></td>
+          <td><input type="text" value="${r.category}" id="edit-category-${idx}" /></td>
+          <td><input type="number" value="${r.amount}" id="edit-amount-${idx}" /></td>
+          <td><input type="text" value="${r.note}" id="edit-note-${idx}" /></td>
+          <td>
+            <button class="action-btn" onclick="saveEdit(${idx})">💾 儲存</button>
+            <button class="action-btn" onclick="cancelEdit(${idx})" style="background:#aaa;color:#333;">✖ 取消</button>
+          </td>
+        `;
+        recordList.appendChild(tr);
+      } else {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.date}</td>
+          <td>${r.category}</td>
+          <td class="${r.amount >= 0 ? 'income' : 'expense'}">${r.amount}</td>
+          <td>${r.note}</td>
+          <td>
+            <button class="action-btn" onclick="startEdit(${idx})">✏️ 編輯</button>
+            <button class="action-btn" onclick="deleteRecord(${idx})" style="background:#f44336;">🗑️ 刪除</button>
+          </td>
+        `;
+        recordList.appendChild(tr);
+      }
+    });
+    totalSpan.textContent = total.toFixed(2);
+    totalSpan.style.color = total >= 0 ? '#388e3c' : '#c2185b';
+  }
+
+  function addRecord() {
+    const date = document.getElementById('date').value;
+    const category = document.getElementById('category').value.trim();
+    const amount = parseFloat(document.getElementById('amount').value);
+    const note = document.getElementById('note').value.trim();
+
+    if (!date || !category || isNaN(amount)) {
+      nagMsg.textContent = "欄位沒填好欸，要我幫你算命嗎？🤨";
+      return;
+    }
+
+    records.push({ date, category, amount, note, editing: false });
+    localStorage.setItem('records', JSON.stringify(records));
+
+    let msg = randomNag();
+    const specialMsg = specialNag(category, amount);
+    if (specialMsg) msg += " 👉 " + specialMsg;
+    nagMsg.textContent = msg;
+
+    document.getElementById('date').value = '';
+    document.getElementById('category').value = '';
+    document.getElementById('amount').value = '';
+    document.getElementById('note').value = '';
+
+    render();
+  }
+
+  function startEdit(idx) {
+    records[idx].editing = true;
+    nagMsg.textContent = "欸欸，編輯模式開啟，請認真修改喔～";
+    render();
+  }
+
+  function cancelEdit(idx) {
+    records[idx].editing = false;
+    nagMsg.textContent = "取消編輯，不改變資料，放心啦！";
+    render();
+  }
+
+  function saveEdit(idx) {
+    const date = document.getElementById(`edit-date-${idx}`).value;
+    const category = document.getElementById(`edit-category-${idx}`).value.trim();
+    const amount = parseFloat(document.getElementById(`edit-amount-${idx}`).value);
+    const note = document.getElementById(`edit-note-${idx}`).value.trim();
+
+    if (!date || !category || isNaN(amount)) {
+      nagMsg.textContent = "欄位沒填好欸，別亂改！🤨";
+      return;
+    }
+
+    records[idx] = { date, category, amount, note, editing: false };
+    localStorage.setItem('records', JSON.stringify(records));
+
+    let msg = randomNag();
+    const specialMsg = specialNag(category, amount);
+    if (specialMsg) msg += " 👉 " + specialMsg;
+    nagMsg.textContent = msg;
+
+    render();
+  }
+
+  function deleteRecord(idx) {
+    if (confirm("確定要刪除這筆紀錄嗎？")) {
+      records.splice(idx, 1);
+      localStorage.setItem('records', JSON.stringify(records));
+      nagMsg.textContent = "已刪除一筆記錄，繼續加油！";
+      render();
+    }
+  }
+
+  render();
+</script>
+
+</body>
+</html>
+
+
+          
